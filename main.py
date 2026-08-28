@@ -292,6 +292,15 @@ def login(page) -> None:
     password_field.fill(password)
     login_button.click()
 
+    # The SPA validates credentials asynchronously (button shows "Checking..").
+    # Wait for the redirect away from /login rather than a network lull.
+    try:
+        page.wait_for_url(
+            re.compile(r"^https://portal\.useventmanagement\.com/(?!login(?:[/?#]|$)).+"),
+            timeout=45000,
+        )
+    except Exception:
+        pass
     page.wait_for_load_state("networkidle", timeout=20000)
 
     success, message = detect_login_result(page)
