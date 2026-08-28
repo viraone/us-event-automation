@@ -250,8 +250,24 @@ def login(page) -> None:
     # A valid saved session redirects /login to an authenticated route (normally
     # /home).  Do not inspect or wait for login controls after that redirect.
     if "/login" not in page.url.lower():
-        print(f"Already authenticated; skipping login fields. Current URL: {page.url}")
-        return
+        # A stale saved session can pass the first redirect and then get bounced
+        # back to /login moments later. Confirm we truly land on /home before
+        # trusting the session; otherwise fall through to a fresh login.
+        try:
+            page.wait_for_url(HOME_URL, timeout=15000)
+            print(f"Already authenticated; skipping login fields. Current URL: {page.url}")
+            return
+        except Exception:
+            print(
+                "Saved session appears stale (did not settle on /home); "
+                f"performing a fresh login. Current URL: {page.url}"
+            )
+            page.goto(LOGIN_URL, wait_until="domcontentloaded")
+            page.wait_for_timeout(1000)
+            if "/login" not in page.url.lower():
+                page.wait_for_url(HOME_URL, timeout=15000)
+                print(f"Session recovered after reload. Current URL: {page.url}")
+                return
 
     email_field = page.get_by_role("textbox", name=re.compile(r"email", re.I))
     password_field = page.get_by_role("textbox", name=re.compile(r"password", re.I))
