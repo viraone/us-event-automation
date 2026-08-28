@@ -35,6 +35,8 @@
   .b-existing { background: rgba(67,160,71,.18); color: #7ed684; }
   .b-removed { background: rgba(239,83,80,.15); color: #f19a98; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .pay { color: #7ed684; font-weight: 600; white-space: nowrap; }
+  .nopay { color: var(--muted); font-weight: 400; }
   .month-head { margin: 26px 0 10px; font-size: 17px; font-weight: 700; color: var(--accent); }
   .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 8px; }
   .cal .dow { color: var(--muted); font-size: 11px; text-transform: uppercase; text-align: center; padding: 4px 0; }
@@ -44,7 +46,7 @@
   .ev { border-radius: 4px; padding: 2px 5px; margin-bottom: 3px; color: #fff; font-size: 10.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .more { color: var(--accent); font-size: 10.5px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 20px; }
-  @media (max-width: 720px) { .cell { min-height: 56px; } th:nth-child(n+6), td:nth-child(n+6) { display: none; } }
+  @media (max-width: 720px) { .cell { min-height: 56px; } th:nth-child(n+7), td:nth-child(n+7) { display: none; } }
 </style>
 </head>
 <body>
@@ -101,19 +103,23 @@ function render() {
   const rows = filtered();
   const ex = rows.filter(g => g.status === 'EXISTING').length;
   const cities = new Set(rows.map(g => g.city)).size;
+  const payValues = rows.map(g => parseFloat((g.pay || '').replace(/[^0-9.]/g, ''))).filter(v => v > 0);
+  const avgPay = payValues.length ? '$' + Math.round(payValues.reduce((a,b) => a+b, 0) / payValues.length) : '—';
   $('stats').innerHTML = [
-    ['Total gigs', rows.length], ['Active', ex], ['Removed', rows.length - ex], ['Cities', cities]
+    ['Total gigs', rows.length], ['Active', ex], ['Removed', rows.length - ex], ['Cities', cities], ['Avg pay', avgPay]
   ].map(([l,n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
   $('content').innerHTML = view === 'list' ? listHTML(rows) : calHTML(rows);
 }
 
 function listHTML(rows) {
   if (!rows.length) return '<p style="color:var(--muted)">No gigs match.</p>';
-  return `<table><thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Store</th><th>City</th><th>State</th><th>Status</th></tr></thead><tbody>` +
+  return `<table><thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Store</th><th>City</th><th>Pay</th><th>State</th><th>Status</th></tr></thead><tbody>` +
     rows.map(g => `<tr>
       <td>${g.date}</td><td>${g.day.slice(0,3)}</td><td>${g.time}</td>
       <td><span class="dot" style="background:${esc(g.color)||'#1e88e5'}"></span>${esc(g.store)}${g.storeNum ? ' ' + esc(g.storeNum) : ''}</td>
-      <td>${esc(g.city)}</td><td>${esc(g.state)}</td>
+      <td>${esc(g.city)}</td>
+      <td class="pay"${g.role || g.eventTime ? ` title="${esc(g.role)}${g.role && g.eventTime ? ' · ' : ''}${esc(g.eventTime)}"` : ''}>${esc(g.pay) || '<span class="nopay">—</span>'}</td>
+      <td>${esc(g.state)}</td>
       <td><span class="badge ${g.status==='EXISTING'?'b-existing':'b-removed'}">${esc(g.status)}</span></td>
     </tr>`).join('') + '</tbody></table>';
 }
@@ -133,7 +139,7 @@ function calHTML(rows) {
       const key = `${m}-${String(d).padStart(2,'0')}`, evs = byDay[key] || [];
       const shown = evs.slice(0, 4);
       cells += `<div class="cell"><div class="d">${d}</div>` +
-        shown.map(g => `<div class="ev" style="background:${esc(g.color)||'#1e88e5'}" title="${esc(g.time)} ${esc(g.store)} ${esc(g.storeNum)} (${esc(g.city)})">${esc(g.time.replace(':00',''))} ${esc(g.store)} ${esc(g.storeNum)}</div>`).join('') +
+        shown.map(g => `<div class="ev" style="background:${esc(g.color)||'#1e88e5'}" title="${esc(g.time)} ${esc(g.store)} ${esc(g.storeNum)} (${esc(g.city)})${g.pay ? ' · ' + esc(g.pay) : ''}${g.role ? ' · ' + esc(g.role) : ''}">${esc(g.time.replace(':00',''))} ${esc(g.store)} ${esc(g.storeNum)}${g.pay ? ' · ' + esc(g.pay.split(' ')[0]) : ''}</div>`).join('') +
         (evs.length > 4 ? `<div class="more">+${evs.length - 4} more</div>` : '') + '</div>';
     }
     cells += '</div>';

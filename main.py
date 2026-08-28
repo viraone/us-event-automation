@@ -95,7 +95,17 @@ DAILY_GIG_HEADERS = [
     "Last Seen",
     "Scraped At",
     "Event ID",
+    "Role",
+    "Event Time",
+    "Pay",
+    "Eligibility",
 ]
+
+# Schema used before gig-detail (Role/Event Time/Pay/Eligibility) columns existed.
+DAILY_GIG_HEADERS_V1 = DAILY_GIG_HEADERS[:18]
+
+# Row fields populated by opening each gig's detail view.
+DETAIL_FIELDS = ("role", "event_time", "pay", "eligibility")
 
 LEGACY_GIG_HEADERS = [
     "Date",
@@ -2644,6 +2654,10 @@ def parse_calendar_listing(event: dict, scraped_at: str, config: MonthConfig) ->
         "scraped_at": scraped_at,
         "event_id": clean_text(event.get("eventId", "")),
         "public_id": clean_text(event.get("publicId", "")),
+        "role": "",
+        "event_time": "",
+        "pay": "",
+        "eligibility": "",
     }
 
 
@@ -2829,7 +2843,7 @@ def load_prior_month_rows(config: MonthConfig) -> tuple[bool, list[dict]]:
         headers = [clean_text(str(cell.value or "")) for cell in sheet[1]]
         if len(headers) != len(set(headers)):
             raise RuntimeError(f"Duplicate headers found in {config.xlsx_path.name}: {headers}")
-        if headers not in (LEGACY_GIG_HEADERS, DAILY_GIG_HEADERS):
+        if headers not in (LEGACY_GIG_HEADERS, DAILY_GIG_HEADERS_V1, DAILY_GIG_HEADERS):
             raise RuntimeError(
                 f"Unexpected schema in {config.xlsx_path.name}. Found headers: {headers}"
             )
@@ -2894,6 +2908,10 @@ def load_prior_month_rows(config: MonthConfig) -> tuple[bool, list[dict]]:
                     "scraped_at": scraped_at,
                     "event_id": "",
                     "public_id": stable_event_id,
+                    "role": clean_text(str(values.get("Role") or "")),
+                    "event_time": clean_text(str(values.get("Event Time") or "")),
+                    "pay": clean_text(str(values.get("Pay") or "")),
+                    "eligibility": clean_text(str(values.get("Eligibility") or "")),
                 }
             )
     finally:
@@ -2986,6 +3004,11 @@ def merge_daily_month_rows(
             output["first_seen"] = prior["first_seen"]
             if not output.get("public_id"):
                 output["public_id"] = prior.get("public_id", "")
+            # Carry gig-detail data forward so already-fetched pay info survives
+            # runs where the detail view was not re-opened.
+            for field in DETAIL_FIELDS:
+                if not clean_text(str(output.get(field) or "")):
+                    output[field] = clean_text(str(prior.get(field) or ""))
         output["last_seen"] = run_at
         output["scraped_at"] = run_at
         merged_rows.append(output)
@@ -3117,6 +3140,10 @@ def daily_row_to_csv_values(row: dict) -> dict:
         "Last Seen": row["last_seen"],
         "Scraped At": row["scraped_at"],
         "Event ID": row.get("public_id", ""),
+        "Role": row.get("role", ""),
+        "Event Time": row.get("event_time", ""),
+        "Pay": row.get("pay", ""),
+        "Eligibility": row.get("eligibility", ""),
     }
 
 
@@ -3168,12 +3195,16 @@ def write_month_stage(
                 history_timestamp_to_excel(row["last_seen"]),
                 history_timestamp_to_excel(row["scraped_at"]),
                 row.get("public_id", ""),
+                row.get("role", ""),
+                row.get("event_time", ""),
+                row.get("pay", ""),
+                row.get("eligibility", ""),
             ]
         )
 
     last_row = sheet.max_row
     if rows:
-        table = Table(displayName=config.table_name, ref=f"A1:R{last_row}")
+        table = Table(displayName=config.table_name, ref=f"A1:V{last_row}")
         table.tableStyleInfo = TableStyleInfo(
             name="TableStyleMedium2",
             showFirstColumn=False,
@@ -3182,9 +3213,9 @@ def write_month_stage(
             showColumnStripes=False,
         )
         sheet.add_table(table)
-        sheet.auto_filter.ref = f"A1:R{last_row}"
+        sheet.auto_filter.ref = f"A1:V{last_row}"
     else:
-        sheet.auto_filter.ref = "A1:R1"
+        sheet.auto_filter.ref = "A1:V1"
 
     dark_blue = "1F4E78"
     header_fill = PatternFill("solid", fgColor=dark_blue)
@@ -3238,6 +3269,7 @@ def write_month_stage(
         "A": 12, "B": 11, "C": 13, "D": 15, "E": 8, "F": 24,
         "G": 14, "H": 22, "I": 15, "J": 17, "K": 48, "L": 18,
         "M": 42, "N": 12, "O": 22, "P": 22, "Q": 22, "R": 28,
+        "S": 20, "T": 22, "U": 16, "V": 34,
     }
     for column, width in widths.items():
         sheet.column_dimensions[column].width = width
@@ -3252,7 +3284,7 @@ def verify_month_stage(
     workbook = load_workbook(xlsx_stage, data_only=False)
     try:
         sheet = workbook[config.sheet_name]
-        headers = [sheet.cell(1, column).value for column in range(1, 19)]
+        headers = [sheet.cell(1, column).value for column in range(1, len(DAILY_GIG_HEADERS) + 1)]
         if headers != DAILY_GIG_HEADERS:
             raise RuntimeError(f"{config.label} staged XLSX header verification failed.")
         if (
@@ -3261,7 +3293,7 @@ def verify_month_stage(
             or str(sheet.freeze_panes) != "A2"
         ):
             raise RuntimeError(f"{config.label} staged XLSX structure verification failed.")
-        expected_ref = f"A1:R{len(rows) + 1}" if rows else "A1:R1"
+        expected_ref = f"A1:V{len(rows) + 1}" if rows else "A1:V1"
         if sheet.auto_filter.ref != expected_ref:
             raise RuntimeError(f"{config.label} staged autofilter verification failed.")
         if rows:
@@ -3291,6 +3323,10 @@ def verify_month_stage(
                 13: expected["event_url"],
                 14: expected["status"],
                 18: expected.get("public_id", ""),
+                19: expected.get("role", ""),
+                20: expected.get("event_time", ""),
+                21: expected.get("pay", ""),
+                22: expected.get("eligibility", ""),
             }
             for column_number, expected_value in text_columns.items():
                 loaded_value = clean_text(str(sheet.cell(row=row_number, column=column_number).value or ""))
@@ -3447,6 +3483,245 @@ def launch_browser(p: Playwright):
     return browser
 
 
+def seed_details_from_prior(rows: list[dict], prior_rows: list[dict]) -> None:
+    """Copy previously fetched gig-detail fields onto current rows by Event ID."""
+    prior_by_id = {
+        clean_text(prior.get("public_id", "")): prior
+        for prior in prior_rows
+        if clean_text(prior.get("public_id", "")) and clean_text(prior.get("pay", ""))
+    }
+    for row in rows:
+        prior = prior_by_id.get(clean_text(row.get("public_id", "")))
+        if prior and not clean_text(row.get("pay", "")):
+            for field in DETAIL_FIELDS:
+                row[field] = clean_text(str(prior.get(field) or ""))
+
+
+def mark_gig_event_for_detail_click(page, row: dict) -> bool:
+    """Tag the rendered calendar element for this gig so it can be clicked.
+
+    Returns True when a unique clickable element was marked. Events hidden
+    behind a "+N more" overflow are exposed by opening that day's popover.
+    """
+
+    def try_mark() -> bool:
+        return bool(
+            page.evaluate(
+                """
+                target => {
+                  const clean = value => String(value || '').replace(/\\s+/g, ' ').trim();
+                  document.querySelectorAll('[data-us-event-detail-target]').forEach(el =>
+                    el.removeAttribute('data-us-event-detail-target'));
+                  const matches = [...document.querySelectorAll('*')].filter(el => {
+                    const seg = el.fcSeg;
+                    if (!seg || seg.isStart === false) return false;
+                    const def = seg.eventRange?.def || {};
+                    const props = def.extendedProps || {};
+                    const ids = [
+                      def.publicId, props.eventId, props.event_id, props.gigId,
+                      props.gig_id, props.shiftId, props.shift_id,
+                    ].map(clean).filter(Boolean);
+                    if (target.publicId && ids.includes(target.publicId)) return true;
+                    if (target.publicId) return false;
+                    // Fallback identity for events without a durable server ID.
+                    const cellDate = el.closest('[data-date]')?.getAttribute('data-date') || '';
+                    return cellDate === target.date &&
+                      clean(el.textContent).toLowerCase() === target.rawText.toLowerCase();
+                  });
+                  const visible = matches.filter(el => el.getClientRects().length > 0);
+                  const chosen = visible[0] || matches[0];
+                  if (chosen) chosen.setAttribute('data-us-event-detail-target', 'true');
+                  return Boolean(chosen);
+                }
+                """,
+                {
+                    "publicId": clean_text(row.get("public_id", "")),
+                    "date": row["date"],
+                    "rawText": clean_text(row.get("raw_listing", "")),
+                },
+            )
+        )
+
+    if try_mark():
+        return True
+
+    # The event may be hidden behind that day's "+N more" overflow control.
+    for link in discover_overflow_links(page):
+        if link["date"] != row["date"]:
+            continue
+        if mark_overflow_link_for_click(page, link) != 1:
+            continue
+        page.locator('[data-us-event-overflow-target="true"]').click(timeout=10000)
+        page.wait_for_timeout(500)
+        if try_mark():
+            return True
+        close_calendar_overflow_popover(page)
+    return False
+
+
+def extract_gig_detail_sections(page) -> list[dict]:
+    """Extract role/time/pay/eligibility cards from an open gig detail view."""
+    return page.evaluate(
+        """
+        () => {
+          const clean = value => String(value || '').replace(/\\s+/g, ' ').trim();
+          const timeRe = /\\b\\d{1,2}(?::\\d{2})?\\s*[ap]\\.?m\\.?\\s*[-\\u2013\\u2014]\\s*\\d{1,2}(?::\\d{2})?\\s*[ap]\\.?m\\.?/i;
+          const payRe = /\\$\\s*\\d[\\d,]*(?:\\.\\d{1,2})?\\s*(?:\\([^)]{0,40}\\))?(?:\\s*(?:\\/|per)\\s*(?:hr|hour))?/i;
+          const buttonRe = /^(apply|applied|not available|unavailable)$/i;
+          const buttons = [...document.querySelectorAll('button, [role="button"], a, input[type="button"], input[type="submit"]')]
+            .filter(el => buttonRe.test(clean(el.textContent || el.value)));
+          const sections = [];
+          const seen = new Set();
+          for (const button of buttons) {
+            let node = button.parentElement;
+            let container = null;
+            for (let depth = 0; depth < 10 && node; depth++) {
+              const text = node.textContent || '';
+              if (payRe.test(text) || timeRe.test(text)) { container = node; break; }
+              node = node.parentElement;
+            }
+            if (!container || seen.has(container)) continue;
+            seen.add(container);
+            const text = clean(container.textContent);
+            const pay = clean((text.match(payRe) || [''])[0]);
+            const time = clean((text.match(timeRe) || [''])[0]);
+            const eligibility = clean(
+              (text.match(/you are[^.$]{0,120}?eligib[^.$]{0,60}/i) || [''])[0]
+            );
+            // Role: prefer a short leaf label inside the card that is not
+            // time/pay/button text, then fall back to preceding sibling headers
+            // (e.g. the "Brand Ambassador" banner above the card).
+            let role = '';
+            const leafTexts = [...container.querySelectorAll('*')]
+              .filter(el => el.children.length === 0)
+              .map(el => clean(el.textContent))
+              .filter(Boolean);
+            role = leafTexts.find(t =>
+              t.length < 60 && !payRe.test(t) && !timeRe.test(t) &&
+              !buttonRe.test(t) && !/eligib/i.test(t) && /[a-z]/i.test(t) &&
+              !/^\\d/.test(t)) || '';
+            let probe = container;
+            for (let depth = 0; depth < 6 && probe && !role; depth++) {
+              let sibling = probe.previousElementSibling;
+              while (sibling && !role) {
+                const t = clean(sibling.textContent);
+                if (t && t.length < 60 && !payRe.test(t) && !timeRe.test(t)) role = t;
+                sibling = sibling.previousElementSibling;
+              }
+              probe = probe.parentElement;
+            }
+            sections.push({
+              role: clean(role),
+              time,
+              pay,
+              eligibility,
+              buttonText: clean(button.textContent || button.value),
+            });
+          }
+          if (!sections.length) {
+            const body = clean(document.body.textContent);
+            const pay = clean((body.match(payRe) || [''])[0]);
+            const time = clean((body.match(timeRe) || [''])[0]);
+            if (pay) sections.push({ role: '', time, pay, eligibility: '', buttonText: '' });
+          }
+          return sections;
+        }
+        """
+    )
+
+
+def return_to_month_calendar(page, config: MonthConfig) -> None:
+    """Get back to the correct month's calendar after viewing a gig detail."""
+    tab = page.get_by_role("tab", name=re.compile(r"^\s*calendar\s*$", re.I))
+    if tab.count() == 0:
+        tab = page.get_by_text(re.compile(r"^\s*Calendar\s*$"))
+    tab.first.click(timeout=10000)
+    page.wait_for_timeout(700)
+    try:
+        wait_for_month_calendar(page, config)
+    except Exception:
+        navigate_to_calendar_month(page, config)
+        wait_for_month_calendar(page, config)
+
+
+def fetch_missing_event_details(page, config: MonthConfig, rows: list[dict]) -> None:
+    """Open each gig lacking pay info and record role/time/pay/eligibility.
+
+    Controlled by env vars:
+    - US_EVENT_SKIP_DETAILS=1 skips detail fetching entirely.
+    - US_EVENT_DETAIL_LIMIT=N caps how many gigs are opened per month.
+    Failures are per-gig and non-fatal: the row keeps blank detail fields and
+    is retried on the next run.
+    """
+    if os.getenv("US_EVENT_SKIP_DETAILS", "").strip() == "1":
+        print(f"{config.label}: gig detail fetching skipped (US_EVENT_SKIP_DETAILS=1).")
+        return
+    limit_env = os.getenv("US_EVENT_DETAIL_LIMIT", "").strip()
+    limit = int(limit_env) if limit_env else None
+
+    pending = [row for row in rows if not clean_text(row.get("pay", ""))]
+    if limit is not None:
+        pending = pending[:limit]
+    if not pending:
+        print(f"{config.label}: all gigs already have pay details.")
+        return
+    print(f"{config.label}: fetching details for {len(pending)} gig(s)...")
+
+    for index, row in enumerate(pending, start=1):
+        gig_label = f"{row['date']} {row.get('raw_listing', '')}"
+        try:
+            if not mark_gig_event_for_detail_click(page, row):
+                print(f"  [{index}/{len(pending)}] SKIP (element not found): {gig_label}")
+                continue
+            page.locator('[data-us-event-detail-target="true"]').click(timeout=10000)
+            page.wait_for_function(
+                """
+                () => {
+                  const text = document.body.textContent || '';
+                  return /\\$\\s*\\d/.test(text) &&
+                    /apply|applied|not available|unavailable/i.test(text);
+                }
+                """,
+                timeout=20000,
+            )
+            page.wait_for_timeout(600)
+            sections = extract_gig_detail_sections(page)
+            if sections:
+                row["role"] = " | ".join(
+                    dict.fromkeys(s["role"] for s in sections if s["role"])
+                )
+                row["event_time"] = " | ".join(
+                    dict.fromkeys(s["time"] for s in sections if s["time"])
+                )
+                row["pay"] = " | ".join(
+                    dict.fromkeys(s["pay"] for s in sections if s["pay"])
+                )
+                row["eligibility"] = " | ".join(
+                    dict.fromkeys(s["eligibility"] for s in sections if s["eligibility"])
+                )
+                print(
+                    f"  [{index}/{len(pending)}] {gig_label} -> "
+                    f"role={row['role'] or '?'} time={row['event_time'] or '?'} pay={row['pay'] or '?'}"
+                )
+            else:
+                print(f"  [{index}/{len(pending)}] WARN no role sections found: {gig_label}")
+                save_debug_screenshot(page, "detail_no_sections")
+        except Exception as exc:
+            print(f"  [{index}/{len(pending)}] WARN detail fetch failed for {gig_label}: {exc}")
+            save_debug_screenshot(page, "detail_fetch_failed")
+        finally:
+            try:
+                return_to_month_calendar(page, config)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Could not return to the {config.label} calendar after a gig "
+                    f"detail view: {exc}"
+                ) from exc
+
+    fetched = sum(1 for row in pending if clean_text(row.get("pay", "")))
+    print(f"{config.label}: detail fetch complete ({fetched}/{len(pending)} gigs got pay info).")
+
+
 def main() -> None:
     with sync_playwright() as p:  # type: ignore[call-overload]
         browser = launch_browser(p)
@@ -3468,6 +3743,7 @@ def main() -> None:
             click_top_header_calendar(page)
             run_at = datetime.now().astimezone().replace(tzinfo=None).isoformat(timespec="seconds")
             current_rows_by_month: dict[str, list[dict]] = {}
+            prior_by_month: dict[str, tuple[bool, list[dict]]] = {}
 
             # Scrape and validate every configured month before modifying any
             # workbook. This keeps the four-month refresh transactional.
@@ -3478,6 +3754,10 @@ def main() -> None:
                     inspect_calendar_dom(page, config)
                     raw_events = collect_all_month_dom_events(page, config)
                     rows = normalize_month_events(raw_events, config, run_at)
+                    prior_exists, prior_rows = load_prior_month_rows(config)
+                    prior_by_month[config.prefix] = (prior_exists, prior_rows)
+                    seed_details_from_prior(rows, prior_rows)
+                    fetch_missing_event_details(page, config, rows)
                     validate_and_print_current_month(rows, config)
                     current_rows_by_month[config.prefix] = rows
                 except Exception as exc:
@@ -3488,7 +3768,7 @@ def main() -> None:
             results: dict[str, dict] = {}
             rows_to_export: dict[str, list[dict]] = {}
             for config in MONTH_CONFIGS:
-                prior_exists, prior_rows = load_prior_month_rows(config)
+                prior_exists, prior_rows = prior_by_month[config.prefix]
                 merged_rows, summary = merge_daily_month_rows(
                     current_rows_by_month[config.prefix],
                     prior_exists,

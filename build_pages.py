@@ -34,6 +34,9 @@ def build():
                         "color": row.get("Calendar Color", ""),
                         "status": row.get("Status", ""),
                         "lastSeen": row.get("Last Seen", ""),
+                        "role": row.get("Role", ""),
+                        "eventTime": row.get("Event Time", ""),
+                        "pay": row.get("Pay", ""),
                     }
                 )
     gigs.sort(key=lambda g: (g["date"], g["timeSort"]))
