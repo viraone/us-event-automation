@@ -3758,8 +3758,8 @@ def main() -> None:
             login(page)
             page.wait_for_url(HOME_URL, timeout=20000)
             print("Reached /home successfully.")
-            print("Pausing for 30 seconds...")
-            page.wait_for_timeout(30000)
+            print("Pausing 8 seconds for the dashboard to settle...")
+            page.wait_for_timeout(8000)
 
             wait_for_dashboard(page)
             context.storage_state(path=str(AUTH_STATE_PATH))
