@@ -59,6 +59,10 @@
   <div class="filters">
     <input type="search" id="q" placeholder="Search store or city…">
     <select id="month"></select>
+    <select id="pref">
+      <option value="">All cities</option>
+      <option value="1">⭐ Preferred (Bellevue, Seattle, Kirkland)</option>
+    </select>
     <select id="status">
       <option value="">All statuses</option>
       <option value="EXISTING">Existing</option>
@@ -87,15 +91,19 @@ fetch('data.json').then(r => r.json()).then(d => {
   render();
 });
 
-['q','month','status'].forEach(id => $(id).addEventListener('input', render));
+['q','month','status','pref'].forEach(id => $(id).addEventListener('input', render));
 $('btnList').onclick = () => { view='list'; swap(); };
 $('btnCal').onclick = () => { view='cal'; swap(); };
 function swap(){ $('btnList').classList.toggle('on', view==='list'); $('btnCal').classList.toggle('on', view==='cal'); render(); }
 
+const PREFERRED_CITIES = new Set(['bellevue', 'seattle', 'kirkland']);
+
 function filtered() {
   const q = $('q').value.toLowerCase(), m = $('month').value, s = $('status').value;
+  const pref = $('pref').value === '1';
   return GIGS.filter(g =>
     (!m || g.date.startsWith(m)) && (!s || g.status === s) &&
+    (!pref || PREFERRED_CITIES.has((g.city || '').toLowerCase())) &&
     (!q || (g.store + ' ' + g.city + ' ' + g.storeNum).toLowerCase().includes(q)));
 }
 
