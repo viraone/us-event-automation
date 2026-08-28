@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+auth_state.json
+dashboard_state.json
+backups/
+debug/
+*.xlsx
+.DS_Store
+.playwright-browsers/
+.dashboard_refresh.lock

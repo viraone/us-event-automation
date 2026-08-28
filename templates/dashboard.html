@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+
+{% block title %}US Event Gig Dashboard{% endblock %}
+
+{% block content %}
+{% set dashboard_snapshot = snapshot|default({}, true) %}
+{% set dashboard_rows = rows|default(dashboard_snapshot.get('rows', []), true) %}
+{% set dashboard_files = files|default(dashboard_snapshot.get('files', []), true) %}
+{% set dashboard_months = months|default(dashboard_snapshot.get('months', []), true) %}
+{% set totals = summary|default(dashboard_snapshot.get('summary', {}), true) %}
+{% set filters = filter_options|default(dashboard_snapshot.get('filter_options', {}), true) %}
+{% set active_view = initial_view|default('dashboard', true) %}
+{% set active_month = initial_month|default('', true) %}
+
+<section class="gigs-view" id="gigs-view" data-view-panel="gigs"{% if active_view == 'spreadsheets' %} hidden{% endif %}>
+    <div class="page-heading">
+        <div>
+            <p class="page-heading__eyebrow">Opportunity overview</p>
+            <h1 id="view-title">
+                {% if active_view == 'new' %}New gigs
+                {% elif active_view == 'preferred' %}Preferred-city gigs
+                {% elif active_view == 'removed' %}Removed gigs
+                {% elif active_view == 'all' %}All current gigs
+                {% else %}Dashboard{% endif %}
+            </h1>
+            <p id="view-description">
+                {% if active_view == 'new' %}Recently added opportunities across every available month.
+                {% elif active_view == 'preferred' %}Opportunities in Bellevue, Kirkland, and Seattle.
+                {% elif active_view == 'removed' %}Previously listed opportunities no longer on the calendar.
+                {% elif active_view == 'all' %}Every current opportunity found in the latest spreadsheets.
+                {% else %}Review current, new, and preferred opportunities at a glance.{% endif %}
+            </p>
+        </div>
+        <div class="page-heading__actions" aria-label="Dashboard status">
+            <span class="source-pill">
+                <span class="source-pill__dot" aria-hidden="true"></span>
+                {{ dashboard_files|length }} spreadsheet{% if dashboard_files|length != 1 %}s{% endif %} loaded
+            </span>
+        </div>
+    </div>
+
+    <section class="summary-grid" aria-label="Gig summary">
+        <article class="summary-card summary-card--primary" data-tone="primary">
+            <div class="summary-card__topline summary-card__top">
+                <span class="summary-card__icon summary-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="19" height="19"><path d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <span class="summary-card__label summary-label">Total Current Gigs</span>
+            </div>
+            <strong class="summary-card__value summary-value" data-summary="current">{{ totals.get('total_current', 0) }}</strong>
+            <span class="summary-card__caption summary-detail">Active across all loaded months</span>
+        </article>
+
+        <article class="summary-card summary-card--new" data-tone="new">
+            <div class="summary-card__topline summary-card__top">
+                <span class="summary-card__icon summary-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="19" height="19"><path d="m12 3 1.5 5.2L19 7l-3.7 4 3.7 4-5.5-1.2L12 19l-1.5-5.2L5 15l3.7-4L5 7l5.5 1.2L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="summary-card__label summary-label">New Gigs</span>
+            </div>
+            <strong class="summary-card__value summary-value" data-summary="new">{{ totals.get('new', 0) }}</strong>
+            <button class="summary-card__link" type="button" data-view="new">Review new opportunities <span aria-hidden="true">→</span></button>
+        </article>
+
+        <article class="summary-card summary-card--preferred" data-tone="preferred">
+            <div class="summary-card__topline summary-card__top">
+                <span class="summary-card__icon summary-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="19" height="19"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+                </span>
+                <span class="summary-card__label summary-label">Preferred-City Gigs</span>
+            </div>
+            <strong class="summary-card__value summary-value" data-summary="preferred">{{ totals.get('preferred', 0) }}</strong>
+            <span class="summary-card__caption summary-detail">Bellevue · Kirkland · Seattle</span>
+        </article>
+
+        <article class="summary-card summary-card--removed" data-tone="removed">
+            <div class="summary-card__topline summary-card__top">
+                <span class="summary-card__icon summary-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 7h14M9 7V4h6v3m2 0-1 13H8L7 7m3 4v5m4-5v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="summary-card__label summary-label">Removed Gigs</span>
+            </div>
+            <strong class="summary-card__value summary-value" data-summary="removed">{{ totals.get('removed', 0) }}</strong>
+            <button class="summary-card__link" type="button" data-view="removed">View history <span aria-hidden="true">→</span></button>
+        </article>
+    </section>
+
+    {% if dashboard_months %}
+    <section class="month-overview" aria-labelledby="month-overview-title">
+        <div class="section-heading section-heading--inline">
+            <div>
+                <p class="section-heading__eyebrow">Monthly coverage</p>
+                <h2 id="month-overview-title">Available calendars</h2>
+            </div>
+            <span>{{ dashboard_months|length }} month{% if dashboard_months|length != 1 %}s{% endif %}</span>
+        </div>
+        <div class="month-card-list month-card-grid">
+            {% for month in dashboard_months %}
+            <button class="month-card{% if active_month == month.key %} is-active{% endif %}" type="button" data-view="all" data-month="{{ month.key|e }}">
+                <span class="month-card__label">{{ month.label }}</span>
+                <strong>{{ month.current_count|default(month.total_count, true)|default(0, true) }}</strong>
+                <span>current gigs</span>
+                {% if month.new_count|default(0, true) %}<small>{{ month.new_count }} new</small>{% endif %}
+            </button>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="data-panel" aria-labelledby="gigs-heading">
+        <div class="data-panel__header panel-header">
+            <div>
+                <p class="section-heading__eyebrow">Calendar listings</p>
+                <h2 class="panel-title" id="gigs-heading">Gig opportunities</h2>
+            </div>
+            <div class="results-summary" aria-live="polite">
+                <strong id="results-count">{{ dashboard_rows|length }} gigs loaded</strong>
+            </div>
+        </div>
+
+        <form class="filter-toolbar" id="gig-filters" role="search" onsubmit="return false;">
+            <div class="search-field filter-toolbar__search">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <label class="sr-only" for="global-search">Search all gig details</label>
+                <input id="global-search" name="search" type="search" placeholder="Search city, store, listing…" autocomplete="off">
+                <kbd aria-hidden="true">/</kbd>
+            </div>
+
+            <div class="filter-toolbar__primary filter-grid">
+                <div class="field-group filter-field">
+                    <label for="month-filter">Month</label>
+                    <select id="month-filter" name="month">
+                        <option value="">All months</option>
+                        {% for month in dashboard_months %}
+                            <option value="{{ month.key|e }}"{% if active_month == month.key %} selected{% endif %}>{{ month.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group filter-field">
+                    <label for="date-filter">Date</label>
+                    <select id="date-filter" name="date">
+                        <option value="">All dates</option>
+                        {% for option in filters.get('dates', []) %}
+                            {% set option_value = option.get('value', option.get('key', '')) if option is mapping else option %}
+                            {% set option_label = option.get('label', option_value) if option is mapping else option %}
+                            <option value="{{ option_value|e }}">{{ option_label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group filter-field">
+                    <label for="city-filter">City</label>
+                    <select id="city-filter" name="city">
+                        <option value="">All cities</option>
+                        {% for option in filters.get('cities', []) %}
+                            {% set option_value = option.get('value', option.get('key', '')) if option is mapping else option %}
+                            {% set option_label = option.get('label', option_value) if option is mapping else option %}
+                            <option value="{{ option_value|e }}">{{ option_label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group filter-field">
+                    <label for="status-filter">Status</label>
+                    <select id="status-filter" name="status">
+                        <option value="">All statuses</option>
+                        {% for option in filters.get('statuses', []) %}
+                            {% set option_value = option.get('value', option.get('key', '')) if option is mapping else option %}
+                            {% set option_label = option.get('label', option_value) if option is mapping else option %}
+                            <option value="{{ option_value|e }}">{{ option_label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group filter-field">
+                    <label for="account-filter">Store / Account</label>
+                    <select id="account-filter" name="account">
+                        <option value="">All accounts</option>
+                        {% for option in filters.get('accounts', filters.get('stores', [])) %}
+                            {% set option_value = option.get('value', option.get('key', '')) if option is mapping else option %}
+                            {% set option_label = option.get('label', option_value) if option is mapping else option %}
+                            <option value="{{ option_value|e }}">{{ option_label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group filter-field">
+                    <label for="time-filter">Start Time</label>
+                    <select id="time-filter" name="time">
+                        <option value="">All times</option>
+                        {% for option in filters.get('start_times', filters.get('times', [])) %}
+                            {% set option_value = option.get('value', option.get('key', '')) if option is mapping else option %}
+                            {% set option_label = option.get('label', option_value) if option is mapping else option %}
+                            <option value="{{ option_value|e }}">{{ option_label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group filter-field">
+                    <label for="preferred-filter">Preferred Area</label>
+                    <select id="preferred-filter" name="preferred">
+                        <option value="">All areas</option>
+                        <option value="YES">Preferred only</option>
+                        <option value="NO">Other areas</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-toolbar__footer filter-bottom-row">
+                <fieldset class="quick-filters">
+                    <legend class="quick-filter-label">Quick city filter</legend>
+                    <div class="chip-group city-quick-filters">
+                        <button class="filter-chip is-active" type="button" data-city-quick="" aria-pressed="true">All</button>
+                        <button class="filter-chip" type="button" data-city-quick="Bellevue" aria-pressed="false">Bellevue</button>
+                        <button class="filter-chip" type="button" data-city-quick="Kirkland" aria-pressed="false">Kirkland</button>
+                        <button class="filter-chip" type="button" data-city-quick="Seattle" aria-pressed="false">Seattle</button>
+                        <button class="filter-chip" type="button" data-city-quick="Other" aria-pressed="false">Other</button>
+                    </div>
+                </fieldset>
+                <button class="button button--text" id="reset-filters" type="reset">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><path d="M4 7h11a5 5 0 1 1 0 10H9M4 7l3-3M4 7l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Clear filters
+                </button>
+            </div>
+        </form>
+
+        <div class="table-shell table-scroll">
+            <table class="gig-table" id="gig-table">
+                <caption class="sr-only">US Event gig opportunities loaded from monthly spreadsheets</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" data-column="date"><button class="sort-button" type="button" data-sort="date">Date <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="day"><button class="sort-button" type="button" data-sort="day">Day <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="select">Select</th>
+                        <th scope="col" data-column="time"><button class="sort-button" type="button" data-sort="time">Start Time <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="city"><button class="sort-button" type="button" data-sort="city">City <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="store"><button class="sort-button" type="button" data-sort="store">Store / Account <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="store-number">Store #</th>
+                        <th scope="col" data-column="status"><button class="sort-button" type="button" data-sort="status">Status <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="preferred">Preferred</th>
+                        <th scope="col" data-column="listing">Raw Calendar Listing</th>
+                        <th scope="col" data-column="first-seen"><button class="sort-button" type="button" data-sort="first-seen">First Seen <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                        <th scope="col" data-column="last-seen"><button class="sort-button" type="button" data-sort="last-seen">Last Seen <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    </tr>
+                </thead>
+                <tbody id="gig-table-body">
+                    {% for row in dashboard_rows %}
+                        {% set row_status = row.status|default('EXISTING', true)|upper %}
+                        {% set row_preferred = row.preferred_area|default('NO', true)|upper %}
+                        {% set row_city = row.city|default('', true) %}
+                        {% set row_store = row.store_account|default('', true) %}
+                        {% set row_gig_id = row.gig_key|default('row-' ~ loop.index, true) %}
+                        {% set row_search = row.search_text|default((row.date_display|default('', true) ~ ' ' ~ row.day|default('', true) ~ ' ' ~ row.start_time|default('', true) ~ ' ' ~ row_city ~ ' ' ~ row_store ~ ' ' ~ row.store_number|default('', true) ~ ' ' ~ row.raw_calendar_listing|default('', true) ~ ' ' ~ row_status), true) %}
+                        <tr
+                            class="gig-row{% if row_status == 'NEW' %} gig-row--new status-new{% elif row_status == 'REMOVED' %} gig-row--removed status-removed{% endif %}{% if row_preferred == 'YES' %} gig-row--preferred is-preferred{% endif %}"
+                            data-index="{{ loop.index }}"
+                            data-gig-id="{{ row_gig_id|e }}"
+                            data-month="{{ row.month_key|default('', true)|e }}"
+                            data-date="{{ row.date_iso|default('', true)|e }}"
+                            data-day="{{ row.day|default('', true)|e }}"
+                            data-time="{{ row.start_time|default('', true)|e }}"
+                            data-time-sort="{{ row.start_time_sort|default('', true)|e }}"
+                            data-city="{{ row_city|e }}"
+                            data-status="{{ row_status|e }}"
+                            data-store="{{ row_store|e }}"
+                            data-account="{{ row_store|e }}"
+                            data-store-number="{{ row.store_number|default('', true)|e }}"
+                            data-preferred="{{ row_preferred|e }}"
+                            data-priority="{{ row.location_priority|default(9, true) }}"
+                            data-first-seen="{{ row.first_seen_iso|default(row.first_seen, true)|default('', true)|e }}"
+                            data-last-seen="{{ row.last_seen_iso|default(row.last_seen, true)|default('', true)|e }}"
+                            data-raw="{{ row.raw_calendar_listing|default('', true)|e }}"
+                            data-search="{{ row_search|lower|e }}"
+                        >
+                            <td class="gig-table__date gig-date cell-primary" data-field="date"><time datetime="{{ row.date_iso|default('', true)|e }}">{{ row.date_display|default(row.date_iso, true)|default('—', true) }}</time></td>
+                            <td class="gig-day" data-field="day">{{ row.day|default('—', true) }}</td>
+                            <td class="gig-table__select" data-field="select">
+                                {% if row_status == 'REMOVED' %}
+                                    <span class="gig-select-unavailable" aria-hidden="true">—</span>
+                                    <span class="sr-only">Removed gig cannot be selected</span>
+                                {% else %}
+                                    <input
+                                        class="gig-select-checkbox"
+                                        id="gig-select-{{ loop.index }}"
+                                        type="checkbox"
+                                        value="{{ row_gig_id|e }}"
+                                        data-gig-id="{{ row_gig_id|e }}"
+                                    >
+                                    <label class="sr-only" for="gig-select-{{ loop.index }}">Select {{ row.date_display|default(row.date_iso, true)|default('gig', true) }} at {{ row.start_time|default('an unspecified time', true) }} in {{ row_city|default('an unspecified city', true) }}{% if row_store %} for {{ row_store }}{% endif %}{% if row.store_number|default('', true) %} {{ row.store_number }}{% endif %}</label>
+                                {% endif %}
+                            </td>
+                            <td class="gig-table__time gig-time" data-field="time"><time datetime="{{ row.start_time_sort|default('', true)|e }}">{{ row.start_time|default('—', true) }}</time></td>
+                            <td class="gig-city" data-field="city">
+                                <span class="city-name city-value">{{ row_city|default('—', true) }}</span>
+                                {% if row_preferred == 'YES' %}<span class="preferred-marker preferred-dot" title="Preferred city"><span class="sr-only">Preferred city</span></span>{% endif %}
+                            </td>
+                            <td class="gig-table__store gig-store" data-field="store">{{ row_store|default('—', true) }}</td>
+                            <td class="store-number">{{ row.store_number|default('—', true) }}</td>
+                            <td data-field="status"><span class="status-badge status-badge--{{ row_status|lower }} status-{{ row_status|lower }}">{{ row_status }}</span></td>
+                            <td data-field="preferred">
+                                {% if row_preferred == 'YES' %}<span class="area-badge area-badge--preferred preferred-badge">YES</span>
+                                {% else %}<span class="area-badge muted-value">NO</span>{% endif %}
+                            </td>
+                            <td class="gig-table__listing raw-listing" data-field="raw" title="{{ row.raw_calendar_listing|default('', true)|e }}">{{ row.raw_calendar_listing|default('—', true) }}</td>
+                            <td class="gig-table__seen seen-date" data-field="first-seen"><time datetime="{{ row.first_seen_iso|default('', true)|e }}">{{ row.first_seen|default('—', true) }}</time></td>
+                            <td class="gig-table__seen seen-date" data-field="last-seen"><time datetime="{{ row.last_seen_iso|default('', true)|e }}">{{ row.last_seen|default('—', true) }}</time></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="empty-state" id="empty-state"{% if dashboard_rows %} hidden{% endif %}>
+            <span class="empty-state__icon empty-state-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m16 16 4 4M8.5 11h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+            <h3>No gigs match these filters</h3>
+            <p>Try clearing one or more filters, or choose another available month.</p>
+            <button class="button button--secondary" type="button" data-reset-filters>Clear all filters</button>
+        </div>
+
+        <footer class="table-footer" id="pagination" aria-label="Table pagination">
+            <label class="page-size-control" for="page-size">
+                Rows per page
+                <select id="page-size">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                </select>
+            </label>
+            <div class="pagination-controls">
+                <button class="icon-button icon-button--bordered" id="prev-page" type="button" aria-label="Previous page" disabled>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <output id="page-info" aria-live="polite">Page 1 of 1</output>
+                <button class="icon-button icon-button--bordered" id="next-page" type="button" aria-label="Next page">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+        </footer>
+    </section>
+</section>
+
+<section class="spreadsheets-panel spreadsheets-view" id="spreadsheets" data-view-panel="spreadsheets" aria-labelledby="spreadsheets-title"{% if active_view != 'spreadsheets' %} hidden{% endif %}>
+    <div class="page-heading">
+        <div>
+            <p class="page-heading__eyebrow">Source files</p>
+            <h1 id="spreadsheets-title">Spreadsheets</h1>
+            <p>Download any discovered workbook. Refreshing this dashboard rereads the latest files automatically.</p>
+        </div>
+        <span class="read-only-badge">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6V11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            Read only
+        </span>
+    </div>
+
+    <div class="spreadsheet-callout spreadsheet-intro">
+        <span class="spreadsheet-callout__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="23" height="23"><path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3v5h4M8 12h7M8 16h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <div>
+            <strong>Spreadsheets are the source of truth</strong>
+            <p>Use <strong>Refresh Gig Data</strong> in the header to run the calendar update. The dashboard reloads the newest files automatically when it finishes.</p>
+        </div>
+    </div>
+
+    <div class="spreadsheet-grid">
+        {% for file in dashboard_files %}
+            <article class="spreadsheet-card">
+                <div class="spreadsheet-card__file-icon spreadsheet-icon" aria-hidden="true">XLSX</div>
+                <div class="spreadsheet-card__body">
+                    <p class="spreadsheet-card__eyebrow spreadsheet-month">{{ file.month_label|default('Calendar data', true) }}</p>
+                    <h2 class="spreadsheet-name">{{ file.name }}</h2>
+                    <dl class="spreadsheet-card__meta spreadsheet-stats">
+                        <div><dt>Rows</dt><dd>{{ file.row_count|default('—', true) }}</dd></div>
+                        <div><dt>Size</dt><dd>{{ file.size_display|default('—', true) }}</dd></div>
+                        <div><dt>Modified</dt><dd>{{ file.modified_display|default('—', true) }}</dd></div>
+                    </dl>
+                </div>
+                <a class="button button--secondary spreadsheet-card__download spreadsheet-action" href="{{ file.download_url|default('/spreadsheets/' ~ file.name|urlencode, true) }}" download>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Download
+                    <span class="sr-only">{{ file.name }}</span>
+                </a>
+            </article>
+        {% else %}
+            <div class="empty-state empty-state--panel">
+                <span class="empty-state__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="28" height="28"><path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M15 3v5h4M8 13h8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                </span>
+                <h2>No spreadsheets found</h2>
+                <p>Files named <code>US_Event_*_Gigs.xlsx</code> will appear here automatically.</p>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="A read-only dashboard for US Event Management calendar opportunities.">
+    <title>{% block title %}US Event Gig Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% block head %}{% endblock %}
+</head>
+{% set base_snapshot = snapshot|default({}, true) %}
+{% set base_summary = summary|default(base_snapshot.get('summary', {}), true) %}
+{% set base_months = months|default(base_snapshot.get('months', []), true) %}
+{% set base_files = files|default(base_snapshot.get('files', []), true) %}
+{% set base_last_refreshed = last_refreshed|default(base_snapshot.get('last_refreshed', 'Not available'), true) %}
+{% set active_view = initial_view|default('dashboard', true) %}
+{% set active_month = initial_month|default('', true) %}
+<body
+    data-initial-view="{{ active_view|e }}"
+    data-initial-month="{{ active_month|e }}"
+>
+    <a class="skip-link" href="#main-content">Skip to gig dashboard</a>
+
+    <header class="topbar top-header header-inner" role="banner">
+        <div class="topbar__brand-group">
+            <button
+                class="icon-button topbar__menu-button"
+                id="mobile-menu-toggle"
+                type="button"
+                aria-label="Open dashboard navigation"
+                aria-controls="sidebar"
+                aria-expanded="false"
+            >
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+
+            <a class="brand" href="/?view=dashboard" aria-label="US Event Gig Dashboard home">
+                <span class="brand__mark brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22">
+                        <path d="M7 3v3M17 3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <path d="m8.2 14 2.2 2.2 5.3-5.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="brand__copy brand-copy">
+                    <strong class="brand-title">US Event Gig Dashboard</strong>
+                    <span class="brand-subtitle">Live calendar opportunities from US Event Management</span>
+                </span>
+            </a>
+        </div>
+
+        <div class="topbar__meta header-actions">
+            <div class="refresh-status last-refreshed" aria-label="Spreadsheet data freshness">
+                <span class="refresh-status__indicator live-dot" aria-hidden="true"></span>
+                <span>
+                    <span class="refresh-status__label">Last refreshed</span>
+                    <time id="last-refreshed">{{ base_last_refreshed|default('Not available', true) }}</time>
+                </span>
+            </div>
+            <div class="recruiter-header-actions" aria-label="Recruiter message tools">
+                <span class="selected-gig-count" id="selected-gig-count" role="status" aria-live="polite" aria-atomic="true">0 gigs selected</span>
+                <button
+                    class="button button--secondary recruiter-generate-button"
+                    id="generate-recruiter-text"
+                    type="button"
+                    aria-controls="recruiter-drawer"
+                    aria-describedby="selected-gig-count"
+                    aria-expanded="false"
+                    disabled
+                >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                        <path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-1-1.73V6a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                        <path d="M8 9h8M8 13h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                    <span>Generate Recruiter Text</span>
+                </button>
+            </div>
+            <button
+                class="button refresh-button"
+                id="refresh-data"
+                type="button"
+                aria-describedby="refresh-job-status"
+            >
+                <span class="refresh-button__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16">
+                        <path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.6L4 9m16 6-2.2 2.4A7 7 0 0 1 5.5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="refresh-button__label" id="refresh-button-label">Refresh Gig Data</span>
+            </button>
+            <span class="sr-only" id="refresh-job-status" role="status" aria-live="polite" aria-atomic="true">Ready to refresh gig data.</span>
+        </div>
+    </header>
+
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
+    <div class="app-shell" id="app-shell">
+        <aside class="sidebar" id="sidebar" aria-label="Dashboard navigation">
+            <div class="sidebar__inner">
+                <nav class="sidebar-nav sidebar-section" aria-label="Gig views">
+                    <p class="sidebar-nav__eyebrow sidebar-label">Workspace</p>
+                    <a class="nav-link{% if active_view == 'dashboard' %} is-active{% endif %}" href="/?view=dashboard" data-view="dashboard"{% if active_view == 'dashboard' %} aria-current="page"{% endif %}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+                            <rect x="4" y="4" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="4" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="14" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="14" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                        </svg>
+                        <span>Dashboard</span>
+                    </a>
+                    <a class="nav-link{% if active_view == 'all' %} is-active{% endif %}" href="/?view=all" data-view="all"{% if active_view == 'all' %} aria-current="page"{% endif %}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                        <span>All Gigs</span>
+                        <span class="nav-link__count nav-count" data-nav-count="current">{{ base_summary.get('total_current', 0) }}</span>
+                    </a>
+                    <a class="nav-link{% if active_view == 'new' %} is-active{% endif %}" href="/?view=new" data-view="new"{% if active_view == 'new' %} aria-current="page"{% endif %}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="m12 3 1.5 5.2L19 7l-3.7 4 3.7 4-5.5-1.2L12 19l-1.5-5.2L5 15l3.7-4L5 7l5.5 1.2L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                        <span>New Gigs</span>
+                        <span class="nav-link__count nav-link__count--accent nav-count" data-nav-count="new">{{ base_summary.get('new', 0) }}</span>
+                    </a>
+                    <a class="nav-link{% if active_view == 'preferred' %} is-active{% endif %}" href="/?view=preferred" data-view="preferred"{% if active_view == 'preferred' %} aria-current="page"{% endif %}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+                        <span>Preferred Cities</span>
+                        <span class="nav-link__count nav-count" data-nav-count="preferred">{{ base_summary.get('preferred', 0) }}</span>
+                    </a>
+                    <a class="nav-link{% if active_view == 'removed' %} is-active{% endif %}" href="/?view=removed" data-view="removed"{% if active_view == 'removed' %} aria-current="page"{% endif %}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M5 7h14M9 7V4h6v3m2 0-1 13H8L7 7m3 4v5m4-5v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Removed Gigs</span>
+                        <span class="nav-link__count nav-count" data-nav-count="removed">{{ base_summary.get('removed', 0) }}</span>
+                    </a>
+                    <a class="nav-link{% if active_view == 'spreadsheets' %} is-active{% endif %}" href="/?view=spreadsheets" data-view="spreadsheets"{% if active_view == 'spreadsheets' %} aria-current="page"{% endif %}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3v5h4M8 12h7M8 16h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                        <span>Spreadsheets</span>
+                        <span class="nav-link__count nav-count">{{ base_files|length }}</span>
+                    </a>
+                </nav>
+
+                <nav class="sidebar-nav sidebar-nav--months sidebar-section" aria-label="Available months">
+                    <p class="sidebar-nav__eyebrow sidebar-label">Available months</p>
+                    {% for month in base_months %}
+                        <a
+                            class="nav-link month-link{% if active_month == month.key %} is-active{% endif %}"
+                            href="/?view=all&amp;month={{ month.key|urlencode }}"
+                            data-view="all"
+                            data-month="{{ month.key|e }}"
+                            {% if active_month == month.key %}aria-current="page"{% endif %}
+                        >
+                            <span class="month-link__dot" aria-hidden="true"></span>
+                            <span>{{ month.label }}</span>
+                            <span class="nav-link__count nav-count">{{ month.current_count|default(month.total_count, true)|default(0, true) }}</span>
+                        </a>
+                    {% else %}
+                        <p class="sidebar__empty">No monthly spreadsheets found.</p>
+                    {% endfor %}
+                </nav>
+
+                <div class="sidebar__source-note sidebar-footer">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="M12 3 4.5 6.5v5c0 4.5 3 8 7.5 9.5 4.5-1.5 7.5-5 7.5-9.5v-5L12 3Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span><strong>Read-only dashboard</strong>Spreadsheet files remain the source of truth.</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content" id="main-content" tabindex="-1">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <div class="notification-region" id="notification-region" aria-live="polite" aria-relevant="additions text">
+        <section
+            class="refresh-notification"
+            id="refresh-notification"
+            role="status"
+            aria-labelledby="refresh-notification-title"
+            aria-describedby="refresh-notification-message"
+            aria-atomic="true"
+            hidden
+        >
+            <span class="refresh-notification__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                    <path class="refresh-notification__refresh-mark" d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.6L4 9m16 6-2.2 2.4A7 7 0 0 1 5.5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path class="refresh-notification__success-mark" d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path class="refresh-notification__error-mark" d="M12 8v5m0 3.5v.1M12 3.5 21 20H3L12 3.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </span>
+            <div class="refresh-notification__body">
+                <strong id="refresh-notification-title">Refreshing gig data</strong>
+                <p id="refresh-notification-message">The calendar scraper is running. This may take a few minutes.</p>
+                <div class="refresh-notification__actions">
+                    <button
+                        class="refresh-notification__details-toggle"
+                        id="refresh-details-toggle"
+                        type="button"
+                        aria-controls="refresh-error-details"
+                        aria-expanded="false"
+                        hidden
+                    >View Details</button>
+                </div>
+                <div class="refresh-notification__details" id="refresh-error-details" hidden>
+                    <p class="sr-only">Sanitized refresh diagnostic details</p>
+                    <pre id="refresh-error-output" tabindex="0"></pre>
+                </div>
+            </div>
+            <button class="refresh-notification__dismiss" id="refresh-notification-dismiss" type="button" aria-label="Dismiss refresh notification">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+        </section>
+    </div>
+
+    <div class="recruiter-drawer-backdrop" id="recruiter-drawer-backdrop" hidden></div>
+    <aside
+        class="recruiter-drawer"
+        id="recruiter-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recruiter-drawer-title"
+        aria-describedby="recruiter-drawer-subtitle"
+        tabindex="-1"
+        hidden
+    >
+        <header class="recruiter-drawer__header">
+            <div>
+                <h2 id="recruiter-drawer-title">Recruiter Text</h2>
+                <p id="recruiter-drawer-subtitle">Review and edit before sending</p>
+            </div>
+            <button class="icon-button recruiter-drawer__close" type="button" data-recruiter-close aria-label="Close recruiter text drawer">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </header>
+        <div class="recruiter-drawer__body">
+            <p class="recruiter-drawer__count" id="recruiter-drawer-count" aria-live="polite">0 gigs selected</p>
+            <label class="recruiter-drawer__message-label" for="recruiter-message">Message</label>
+            <textarea
+                class="recruiter-drawer__message"
+                id="recruiter-message"
+                rows="18"
+                spellcheck="true"
+            ></textarea>
+            <p class="recruiter-copy-feedback" id="recruiter-copy-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+        </div>
+        <footer class="recruiter-drawer__footer">
+            <button class="button button--secondary" type="button" data-recruiter-close>Close</button>
+            <button class="button recruiter-copy-button" id="copy-recruiter-text" type="button">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                    <rect x="8" y="8" width="11" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                </svg>
+                <span id="copy-recruiter-text-label">Copy Text</span>
+            </button>
+        </footer>
+    </aside>
+
+    <noscript>
+        <div class="noscript-notice" role="status">JavaScript is disabled. All spreadsheet rows are still shown, but interactive filters and sorting are unavailable.</div>
+    </noscript>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
