@@ -3590,11 +3590,22 @@ def extract_gig_detail_sections(page) -> list[dict]:
         """
         () => {
           const clean = value => String(value || '').replace(/\\s+/g, ' ').trim();
+          const isVisible = el => {
+            if (!el.getClientRects().length) return false;
+            const style = getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+          };
+          // Material icon ligature names (e.g. "access_time", "attach_money")
+          // leak into textContent; they are never real role/label text.
+          const isIconText = (el, text) =>
+            /icon/i.test(el.getAttribute('class') || '') || /^[a-z][a-z0-9_]*$/.test(text);
           const timeRe = /\\b\\d{1,2}(?::\\d{2})?\\s*[ap]\\.?m\\.?\\s*[-\\u2013\\u2014]\\s*\\d{1,2}(?::\\d{2})?\\s*[ap]\\.?m\\.?/i;
           const payRe = /\\$\\s*\\d[\\d,]*(?:\\.\\d{1,2})?\\s*(?:\\([^)]{0,40}\\))?(?:\\s*(?:\\/|per)\\s*(?:hr|hour))?/i;
           const buttonRe = /^(apply|applied|not available|unavailable)$/i;
+          // Only the active detail tab: hidden panels from previously opened
+          // gigs stay in the SPA DOM and must not contribute sections.
           const buttons = [...document.querySelectorAll('button, [role="button"], a, input[type="button"], input[type="submit"]')]
-            .filter(el => buttonRe.test(clean(el.textContent || el.value)));
+            .filter(el => isVisible(el) && buttonRe.test(clean(el.textContent || el.value)));
           const sections = [];
           const seen = new Set();
           for (const button of buttons) {
@@ -3617,20 +3628,21 @@ def extract_gig_detail_sections(page) -> list[dict]:
             // time/pay/button text, then fall back to preceding sibling headers
             // (e.g. the "Brand Ambassador" banner above the card).
             let role = '';
-            const leafTexts = [...container.querySelectorAll('*')]
-              .filter(el => el.children.length === 0)
-              .map(el => clean(el.textContent))
-              .filter(Boolean);
-            role = leafTexts.find(t =>
+            const leafEntries = [...container.querySelectorAll('*')]
+              .filter(el => el.children.length === 0 && isVisible(el))
+              .map(el => [el, clean(el.textContent)])
+              .filter(([, t]) => Boolean(t));
+            role = (leafEntries.find(([el, t]) =>
               t.length < 60 && !payRe.test(t) && !timeRe.test(t) &&
               !buttonRe.test(t) && !/eligib/i.test(t) && /[a-z]/i.test(t) &&
-              !/^\\d/.test(t)) || '';
+              !/^\\d/.test(t) && !isIconText(el, t)) || [null, ''])[1];
             let probe = container;
             for (let depth = 0; depth < 6 && probe && !role; depth++) {
               let sibling = probe.previousElementSibling;
               while (sibling && !role) {
                 const t = clean(sibling.textContent);
-                if (t && t.length < 60 && !payRe.test(t) && !timeRe.test(t)) role = t;
+                if (t && t.length < 60 && isVisible(sibling) && !payRe.test(t) &&
+                    !timeRe.test(t) && !isIconText(sibling, t)) role = t;
                 sibling = sibling.previousElementSibling;
               }
               probe = probe.parentElement;
@@ -3702,9 +3714,15 @@ def fetch_missing_event_details(page, config: MonthConfig, rows: list[dict]) -> 
             page.wait_for_function(
                 """
                 () => {
-                  const text = document.body.textContent || '';
-                  return /\\$\\s*\\d/.test(text) &&
-                    /apply|applied|not available|unavailable/i.test(text);
+                  const clean = v => String(v || '').replace(/\\s+/g, ' ').trim();
+                  const isVisible = el => {
+                    if (!el.getClientRects().length) return false;
+                    const style = getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden';
+                  };
+                  return [...document.querySelectorAll('button, [role="button"], a, input[type="button"], input[type="submit"]')]
+                    .some(el => isVisible(el) &&
+                      /^(apply|applied|not available|unavailable)$/i.test(clean(el.textContent || el.value)));
                 }
                 """,
                 timeout=20000,
